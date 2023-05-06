@@ -25,6 +25,9 @@
                 justify-content: center;
                 user-select: none;
             }
+            .cell[seleceted] {
+                box-shadow: inset 0 0 10px blue;
+            }
             .bl-black { border-left-color: black; }
             .br-black { border-right-color: black; }
             .bt-black { border-top-color: black; }
@@ -33,6 +36,7 @@
         <script>
             let env = {
                 dom: {},
+                blank_count: 30,
                 data: [
                     [null,null,null,null,null,null,null,null,null,],
                     [null,null,null,null,null,null,null,null,null,],
@@ -44,26 +48,47 @@
                     [null,null,null,null,null,null,null,null,null,],
                     [null,null,null,null,null,null,null,null,null,],
                 ],
+                selected:null,
             };
             function update_table() {
                 for (let x = 0; x < 9; ++x) {
                     let cells = env.dom.columns[x].getElementsByClassName('cell');
                     for (let y = 0; y < 9; ++y) {
                         cells[y].innerText = env.data[y][x] || '';
+                        cells[y].removeAttribute('seleceted');
+                        if (env.selected !== null && env.selected.x == x && env.selected.y == y)
+                            cells[y].setAttribute('seleceted', '');
                     }
                 }
+                if (env.selected === null)
+                    env.dom.hint.innerText = "Candiates: ";
+                else
+                {
+                    const candiates = get_candiates(env.data, env.selected.x, env.selected.y);
+                    if (candiates.length === 0)
+                        env.dom.hint.innerText = "Candiates: No possible candiates";
+                    else
+                        env.dom.hint.innerText = "Candiates: " + candiates.join(', ');
+                }
+                env.dom.title.innerText = 'Sudoku with {num} blanks'.replace('{num}', env.blank_count);
             }
-            function get_candiates(data, x, y) {
+            function get_candiates(data, x, y, debug) {
                 let candiates = [1,2,3,4,5,6,7,8,9];
                 let disqualified = [];
                 for (let i = 0; i < 9; ++i)
                 {
                     let num = data[i][x];
                     if (i !== y && num !== null && disqualified.indexOf(num) === -1)
+                    {
+                        if (debug === true) console.log(x,i,num);
                         disqualified.push(num);
+                    }    
                     num = data[y][i];
                     if (i !== x && num !== null && disqualified.indexOf(num) === -1)
+                    {
+                        if (debug === true) console.log(x,i,num);
                         disqualified.push(num);
+                    }
                     const base_x = 3 * Math.floor(x / 3);
                     const base_y = 3 * Math.floor(y / 3);
                     const x2 = base_x + i % 3;
@@ -71,7 +96,10 @@
                     if (x2 !== x && y2 !== y) {
                         num = data[y2][x2];
                         if (num !== null && disqualified.indexOf(num) === -1)
+                        {
+                            if (debug === true) console.log(x2,y2,num);
                             disqualified.push(num);
+                        }
                     }
                 }
 
@@ -87,23 +115,31 @@
                     output.push(list[A[x]]);
                 return output;
             }
-            function generate_table() {
+            function sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+            async function generate_table() {
+                async function async_update_table() {
+                    update_table();
+                }
                 let positions_to_fill = [];
                 for (let x = 0; x < 9; ++x) {
                     for (let y = 0; y < 9; ++y) {
-                        positions_to_fill.push({x:x, y:y})
+                        positions_to_fill.push({x:x, y:y});
+                        env.data[y][x] = null;
                     }
                 }
-                positions_to_fill = shuffle(positions_to_fill);
                 let candiates_stack = [];
                 const MODE_FORWARD = 1;
                 const MODE_BACKWARD = 2;
                 let mode = MODE_FORWARD;
-                for (;;) {
+                let max_attempt = -1;
+                for (let time = 0; max_attempt === -1 ||time < max_attempt; ++time) {
                     if (mode === MODE_FORWARD) {
                         let index = candiates_stack.length;
                         if (index >= 81) break;
                         const position = positions_to_fill[index];
+                        env.selected = {x:position.x, y:position.y};
                         let candiates = get_candiates(env.data, position.x, position.y);
                         if (candiates.length === 0)
                         {
@@ -120,6 +156,7 @@
                         let index = candiates_stack.length - 1;
                         const position = positions_to_fill[index];
                         const candiates = candiates_stack[candiates_stack.length-1];
+                        env.selected = {x:position.x, y:position.y};
                         if (candiates.length > 1) {
                             candiates.pop();
                             env.data[position.y][position.x] = candiates[candiates.length - 1];
@@ -129,11 +166,29 @@
                             candiates_stack.pop();
                         }
                     }
+                    if (time % 1 === 0)
+                    {
+                        await async_update_table();
+                        await sleep(1);
+                    }
                 }
+                
+                let blank_count = env.blank_count;
+                const shuffled_positions_to_fill = shuffle(positions_to_fill);
+                for (let x = 0; x < env.blank_count; ++x)
+                {
+                    const pos = shuffled_positions_to_fill[x];
+                    env.data[pos.y][pos.x] = null;
+                }
+                
+                console.log('finished');
+                await async_update_table();
             }
             function body_onload() {
                 console.log('initializing...');
                 env.dom.table = document.getElementById("table");
+                env.dom.hint = document.getElementById("hint");
+                env.dom.title = document.getElementById("title");
                 env.dom.columns = [];
                 for (let x = 0; x < 9; ++x) {
                     let column = document.createElement("div");
@@ -152,18 +207,30 @@
                             classes.push('bb-black');
 
                         cell.setAttribute('class', classes.join(' '));
+                        cell.setAttribute(
+                            'onclick', 
+                            'env.selected = {x: {x}, y: {y}};'
+                            .replace('{x}', x)
+                            .replace('{y}', y)
+                            + 'update_table();'
+                        );
                         column.appendChild(cell);
                     }
                     env.dom.table.appendChild(column);
                     env.dom.columns.push(column);
                 }
-                generate_table();
+                setTimeout(() => generate_table(), 100);
                 update_table();
             }
         </script>
     </head>
     <body>
-        <h1>Sudoku</h1>
+        <div style="display:flex; flex-direction: row;">
+            <h1 id="title" style="margin: 0px 1rem 0px 0px;">Sudoku with 30 blanks</h1>
+        </div>
+        <input type="range" min="10" max="80" value="30" onchange="env.blank_count=this.value; update_table();"/>
+        <input type="button" value="generate" onclick="generate_table()"/>
+        <h3 id="hint" style="margin: 0px">Candiates:</h3>
         <div id="table">
         </div>
         <script>
