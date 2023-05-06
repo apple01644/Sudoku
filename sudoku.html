@@ -4,10 +4,11 @@
         <title>Sudoku</title>
         <style>
             #table {
-                border: 1px solid;
+                border: 2px solid;
                 width: min-content;
                 display: flex;
                 flex-direction: row;
+                padding: 2px;
             }
             .column {
                 display: flex;
@@ -18,34 +19,41 @@
                 border-color: gray;
                 width : 2rem;
                 height: 2rem;
-                font-family: 'Consolas';
+                font-family: Fantasy;
                 font-size: 2rem;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 user-select: none;
             }
+            .cell[highlighted] {
+                box-shadow: inset 0 0 20px skyblue;
+            }
             .cell[seleceted] {
-                box-shadow: inset 0 0 10px blue;
+                box-shadow: inset 0 0 20px blue;
             }
             .cell[disabled] {
-                background-color: #EEEEEE;
+                background-color: #444444;
+                color: white;
             }
             .cell[error="1"] {
                 background-color: pink;
             }
+            .cell[error="2"][disabled] {
+                background-color: darkred;
+            }
             .cell[error="2"] {
                 background-color: red;
             }
-            .bl-black { border-left-color: black; }
-            .br-black { border-right-color: black; }
-            .bt-black { border-top-color: black; }
-            .bb-black { border-bottom-color: black; }
+            .bl-black { border-left  : 2px solid black; margin-left  : 1px;}
+            .br-black { border-right : 2px solid black; margin-right : 1px;}
+            .bt-black { border-top   : 2px solid black; margin-top   : 1px;}
+            .bb-black { border-bottom: 2px solid black; margin-bottom: 1px;}
         </style>
         <script>
             let env = {
                 dom: {},
-                blank_count: 30,
+                blank_count: 50,
                 data: [
                     [null,null,null,null,null,null,null,null,null,],
                     [null,null,null,null,null,null,null,null,null,],
@@ -104,13 +112,61 @@
                     }
                     if (error_found)
                     {
-                        itr.map(k => { 
-                            if (env.error[k][i] == 0)
-                                env.error[k][i] = 1;
-                        });
-                                  
+                        nums.map(named_tup => { 
+                            if (env.error[named_tup.y][named_tup.x] == 0)
+                                env.error[named_tup.y][named_tup.x] = 1;
+                        });                                    
                     }
-
+                    
+                    nums = itr.map(k => { return {x:k, y:i, num:env.data[i][k]}; })
+                                  .filter(named_tup => named_tup.num !== null);
+                    error_found = false;
+                    for (const dict of nums)
+                    {
+                        const count = nums.filter(named_tup => named_tup.num === dict.num).length;
+                        if (count > 1)
+                        {    
+                            env.error[dict.y][dict.x] = 2;
+                            error_found = true;
+                        }
+                    }
+                    if (error_found)
+                    {
+                        nums.map(named_tup => { 
+                            if (env.error[named_tup.y][named_tup.x] == 0)
+                                env.error[named_tup.y][named_tup.x] = 1;
+                        });                                  
+                    }
+                }
+                for (let x2 = 0; x2 < 9; x2 += 3) {
+                    for (let y2 = 0; y2 < 9; y2 += 3) {
+                        let nums = [];
+                        for (let dx = 0; dx < 3; ++dx) {
+                            for (let dy = 0; dy < 3; ++dy) {
+                                nums.push({
+                                        x:x2+dx, y:y2+dy, num:env.data[y2+dy][x2+dx]
+                                });
+                            }
+                        }
+                        nums = nums.filter(named_tup => named_tup.num !== null);
+                        let error_found = false;
+                        for (const dict of nums)
+                        {
+                            const count = nums.filter(named_tup => named_tup.num === dict.num).length;
+                            if (count > 1)
+                            {    
+                                env.error[dict.y][dict.x] = 2;
+                                error_found = true;
+                            }
+                        }
+                        if (error_found)
+                        {
+                            nums.map(named_tup => { 
+                                if (env.error[named_tup.y][named_tup.x] == 0)
+                                    env.error[named_tup.y][named_tup.x] = 1;
+                            });        
+                        }
+                    }
                 }
             }
             function update_table() {
@@ -122,10 +178,15 @@
                         cells[y].removeAttribute('seleceted');
                         if (env.selected.x == x && env.selected.y == y)
                             cells[y].setAttribute('seleceted', '');
+                        cells[y].removeAttribute('highlighted');
+                        if (env.data[env.selected.y][env.selected.x] == env.data[y][x] && env.data[y][x] !== null)
+                            cells[y].setAttribute('highlighted', '');
                         cells[y].removeAttribute('disabled');
                         if (env.freeze[y][x] === true)
                             cells[y].setAttribute('disabled', '');
                         cells[y].setAttribute('error', env.error[y][x]);
+
+                        
                     }
                 }
                 const candiates = get_candiates(env.data, env.selected.x, env.selected.y);
@@ -138,36 +199,31 @@
             }
             function get_candiates(data, x, y, debug) {
                 let candiates = [1,2,3,4,5,6,7,8,9];
-                let disqualified = [];
+                const base_x = 3 * Math.floor(x / 3);
+                const base_y = 3 * Math.floor(y / 3);
                 for (let i = 0; i < 9; ++i)
                 {
                     let num = data[i][x];
-                    if (i !== y && num !== null && disqualified.indexOf(num) === -1)
-                    {
-                        if (debug === true) console.log(x,i,num);
-                        disqualified.push(num);
-                    }    
+                    if (i !== y && num !== null) candiates[num-1] = null;
+                    
                     num = data[y][i];
-                    if (i !== x && num !== null && disqualified.indexOf(num) === -1)
+                    if (i !== x && num !== null) candiates[num-1] = null;
+                }
+                for (let dx = 0; dx < 3; ++dx)
+                {
+                    for (let dy = 0; dy < 3; ++dy)
                     {
-                        if (debug === true) console.log(x,i,num);
-                        disqualified.push(num);
-                    }
-                    const base_x = 3 * Math.floor(x / 3);
-                    const base_y = 3 * Math.floor(y / 3);
-                    const x2 = base_x + i % 3;
-                    const y2 = base_y + Math.floor(i / 3);
-                    if (x2 !== x && y2 !== y) {
-                        num = data[y2][x2];
-                        if (num !== null && disqualified.indexOf(num) === -1)
-                        {
-                            if (debug === true) console.log(x2,y2,num);
-                            disqualified.push(num);
+                        const x2 = base_x + dx;
+                        const y2 = base_y + dy;
+                        if (x2 !== x && y2 !== y) {
+                            num = data[y2][x2];
+                            if (num !== null) candiates[num-1] = null;
+                            
                         }
                     }
                 }
 
-                return candiates.filter(k => disqualified.indexOf(k) === -1);
+                return candiates.filter(k => k !== null);
             }
             function shuffle(list) {
                 let flag = {};
@@ -194,12 +250,17 @@
                         env.freeze[y][x] = true;
                     }
                 }
+                positions_to_fill = shuffle(positions_to_fill);
                 let candiates_stack = [];
                 const MODE_FORWARD = 1;
                 const MODE_BACKWARD = 2;
                 let mode = MODE_FORWARD;
                 let max_attempt = -1;
-                for (let time = 0; max_attempt === -1 ||time < max_attempt; ++time) {
+                let attempt = 0;
+                let present_every_n_attempts = Math.ceil(max_attempt / 100);
+                present_every_n_attempts = 10000000;
+                // '120,827,159'
+                for (attempt = 0; max_attempt === -1 || attempt < max_attempt; ++attempt) {
                     if (mode === MODE_FORWARD) {
                         let index = candiates_stack.length;
                         if (index >= 81) break;
@@ -212,7 +273,7 @@
                         }
                         else
                         {
-                            candiates = shuffle(candiates);
+                            //candiates = shuffle(candiates);
                             env.data[position.y][position.x] = candiates[candiates.length - 1];
                             candiates_stack.push(candiates);
                         }
@@ -220,34 +281,38 @@
                     else {
                         let index = candiates_stack.length - 1;
                         const position = positions_to_fill[index];
-                        const candiates = candiates_stack[candiates_stack.length-1];
+                        let candiates = candiates_stack[candiates_stack.length-1];
                         env.selected = {x:position.x, y:position.y};
                         if (candiates.length > 1) {
-                            candiates.pop();
+                            candiates_stack[candiates_stack.length-1].pop();
                             env.data[position.y][position.x] = candiates[candiates.length - 1];
                             mode = MODE_FORWARD;
                         } else {
                             env.data[position.y][position.x] = null;
                             candiates_stack.pop();
+                            if (candiates_stack.length === 0)
+                                throw 'Done for all potential ways but cannot complete.';
                         }
                     }
-                    if (time % 1 === 0)
+                    if (attempt % present_every_n_attempts === 0)
                     {
                         await async_update_table();
                         await sleep(1);
                     }
                 }
                 
-                let blank_count = env.blank_count;
-                const shuffled_positions_to_fill = shuffle(positions_to_fill);
-                for (let x = 0; x < env.blank_count; ++x)
-                {
-                    const pos = shuffled_positions_to_fill[x];
-                    env.data[pos.y][pos.x] = null;
-                    env.freeze[pos.y][pos.x] = false;
-                }
+                //if (candiates_stack.length === 81) {
+                //    let blank_count = env.blank_count;
+                //    const shuffled_positions_to_fill = shuffle(positions_to_fill);
+                //    for (let x = 0; x < env.blank_count; ++x)
+                //    {
+                //        const pos = shuffled_positions_to_fill[x];
+                //        env.data[pos.y][pos.x] = null;
+                //        env.freeze[pos.y][pos.x] = false;
+                //    }
+                //}
                 
-                console.log('finished');
+                console.log('finished with ' + attempt + ' attempts.');
                 await async_update_table();
             }
             function body_onload() {
@@ -323,8 +388,12 @@
                 {
                     const num = e.code.match(re_num)[0];
                     if (env.freeze[env.selected.y][env.selected.x] === true) return;
-                    env.data[env.selected.y][env.selected.x] = num;
-
+                    env.data[env.selected.y][env.selected.x] = Number(num);
+                }
+                else if (['Space', 'Delete', 'Backspace'].indexOf(e.code) !== -1)
+                {
+                    if (env.freeze[env.selected.y][env.selected.x] === true) return;
+                    env.data[env.selected.y][env.selected.x] = null;
                 }
                 update_table();
             }
@@ -332,9 +401,9 @@
     </head>
     <body>
         <div style="display:flex; flex-direction: row;">
-            <h1 id="title" style="margin: 0px 1rem 0px 0px;">Sudoku with 30 blanks</h1>
+            <h1 id="title" style="margin: 0px 1rem 0px 0px;">Sudoku</h1>
         </div>
-        <input type="range" min="10" max="80" value="30" onchange="env.blank_count=this.value; update_table();"/>
+        <input type="range" min="10" max="80" value="50" onchange="env.blank_count=this.value; update_table();"/>
         <input type="button" value="generate" onclick="generate_table()"/>
         <h3 id="hint" style="margin: 0px">Candiates:</h3>
         <div id="table">
