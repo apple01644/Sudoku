@@ -1,0 +1,173 @@
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <title>Sudoku</title>
+        <style>
+            #table {
+                border: 1px solid;
+                width: min-content;
+                display: flex;
+                flex-direction: row;
+            }
+            .column {
+                display: flex;
+                flex-direction: column;
+            }
+            .cell {
+                border: 1px solid;
+                border-color: lightgray;
+                width : 2rem;
+                height: 2rem;
+                font-family: 'Consolas';
+                font-size: 2rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                user-select: none;
+            }
+            .bl-black { border-left-color: black; }
+            .br-black { border-right-color: black; }
+            .bt-black { border-top-color: black; }
+            .bb-black { border-bottom-color: black; }
+        </style>
+        <script>
+            let env = {
+                dom: {},
+                data: [
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                    [null,null,null,null,null,null,null,null,null,],
+                ],
+            };
+            function update_table() {
+                for (let x = 0; x < 9; ++x) {
+                    let cells = env.dom.columns[x].getElementsByClassName('cell');
+                    for (let y = 0; y < 9; ++y) {
+                        cells[y].innerText = env.data[y][x] || '';
+                    }
+                }
+            }
+            function get_candiates(data, x, y) {
+                let candiates = [1,2,3,4,5,6,7,8,9];
+                let disqualified = [];
+                for (let i = 0; i < 9; ++i)
+                {
+                    let num = data[i][x];
+                    if (i !== y && num !== null && disqualified.indexOf(num) === -1)
+                        disqualified.push(num);
+                    num = data[y][i];
+                    if (i !== x && num !== null && disqualified.indexOf(num) === -1)
+                        disqualified.push(num);
+                    const base_x = 3 * Math.floor(x / 3);
+                    const base_y = 3 * Math.floor(y / 3);
+                    const x2 = base_x + i % 3;
+                    const y2 = base_y + Math.floor(i / 3);
+                    if (x2 !== x && y2 !== y) {
+                        num = data[y2][x2];
+                        if (num !== null && disqualified.indexOf(num) === -1)
+                            disqualified.push(num);
+                    }
+                }
+
+                return candiates.filter(k => disqualified.indexOf(k) === -1);
+            }
+            function shuffle(list) {
+                let flag = {};
+                let output = [];
+                for (let x = 0; x < list.length; ++x)
+                    flag[x] = Math.random();
+                let A = Object.entries(flag).sort((a,b)=>a[1]-b[1]).map(t=>t[0]);
+                for (let x = 0; x < A.length; ++x)
+                    output.push(list[A[x]]);
+                return output;
+            }
+            function generate_table() {
+                let positions_to_fill = [];
+                for (let x = 0; x < 9; ++x) {
+                    for (let y = 0; y < 9; ++y) {
+                        positions_to_fill.push({x:x, y:y})
+                    }
+                }
+                positions_to_fill = shuffle(positions_to_fill);
+                let candiates_stack = [];
+                const MODE_FORWARD = 1;
+                const MODE_BACKWARD = 2;
+                let mode = MODE_FORWARD;
+                for (;;) {
+                    if (mode === MODE_FORWARD) {
+                        let index = candiates_stack.length;
+                        if (index >= 81) break;
+                        const position = positions_to_fill[index];
+                        let candiates = get_candiates(env.data, position.x, position.y);
+                        if (candiates.length === 0)
+                        {
+                            mode = MODE_BACKWARD;
+                        }
+                        else
+                        {
+                            candiates = shuffle(candiates);
+                            env.data[position.y][position.x] = candiates[candiates.length - 1];
+                            candiates_stack.push(candiates);
+                        }
+                    }
+                    else {
+                        let index = candiates_stack.length - 1;
+                        const position = positions_to_fill[index];
+                        const candiates = candiates_stack[candiates_stack.length-1];
+                        if (candiates.length > 1) {
+                            candiates.pop();
+                            env.data[position.y][position.x] = candiates[candiates.length - 1];
+                            mode = MODE_FORWARD;
+                        } else {
+                            env.data[position.y][position.x] = null;
+                            candiates_stack.pop();
+                        }
+                    }
+                }
+            }
+            function body_onload() {
+                console.log('initializing...');
+                env.dom.table = document.getElementById("table");
+                env.dom.columns = [];
+                for (let x = 0; x < 9; ++x) {
+                    let column = document.createElement("div");
+                    for (let y = 0; y < 9; ++y) {
+                        column.setAttribute('class','column');
+                        let cell = document.createElement("div");
+                        let classes = ['cell'];
+                        
+                        if (x%3 == 0)
+                            classes.push('bl-black');
+                        if (x%3 == 2)
+                            classes.push('br-black');
+                        if (y%3 == 0)
+                            classes.push('bt-black');
+                        if (y%3 == 2)
+                            classes.push('bb-black');
+
+                        cell.setAttribute('class', classes.join(' '));
+                        column.appendChild(cell);
+                    }
+                    env.dom.table.appendChild(column);
+                    env.dom.columns.push(column);
+                }
+                generate_table();
+                update_table();
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Sudoku</h1>
+        <div id="table">
+        </div>
+        <script>
+            document.body.onload = body_onload;
+        </script>
+    </body>
+</html>
