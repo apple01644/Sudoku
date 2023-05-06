@@ -15,7 +15,7 @@
             }
             .cell {
                 border: 1px solid;
-                border-color: lightgray;
+                border-color: gray;
                 width : 2rem;
                 height: 2rem;
                 font-family: 'Consolas';
@@ -27,6 +27,15 @@
             }
             .cell[seleceted] {
                 box-shadow: inset 0 0 10px blue;
+            }
+            .cell[disabled] {
+                background-color: #EEEEEE;
+            }
+            .cell[error="1"] {
+                background-color: pink;
+            }
+            .cell[error="2"] {
+                background-color: red;
             }
             .bl-black { border-left-color: black; }
             .br-black { border-right-color: black; }
@@ -48,28 +57,83 @@
                     [null,null,null,null,null,null,null,null,null,],
                     [null,null,null,null,null,null,null,null,null,],
                 ],
-                selected:null,
+                error: [
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                    [0,0,0,0,0,0,0,0,0,],
+                ],
+                freeze: [
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                    [false,false,false,false,false,false,false,false,false,],
+                ],
+                selected:{x:0,y:0},
             };
+            function mark_error_on_table() {
+                for (let x = 0; x < 9; ++x) {
+                    for (let y = 0; y < 9; ++y) {
+                        env.error[y][x] = 0;
+                    }
+                }
+                let itr = [0,1,2,3,4,5,6,7,8];
+
+                for (let i = 0; i < 9; ++i) {
+                    let nums = itr.map(k => { return {x:i, y:k, num:env.data[k][i]}; })
+                                  .filter(named_tup => named_tup.num !== null);
+                    let error_found = false;
+                    for (const dict of nums)
+                    {
+                        const count = nums.filter(named_tup => named_tup.num === dict.num).length;
+                        if (count > 1)
+                        {    
+                            env.error[dict.y][dict.x] = 2;
+                            error_found = true;
+                        }
+                    }
+                    if (error_found)
+                    {
+                        itr.map(k => { 
+                            if (env.error[k][i] == 0)
+                                env.error[k][i] = 1;
+                        });
+                                  
+                    }
+
+                }
+            }
             function update_table() {
+                mark_error_on_table();
                 for (let x = 0; x < 9; ++x) {
                     let cells = env.dom.columns[x].getElementsByClassName('cell');
                     for (let y = 0; y < 9; ++y) {
                         cells[y].innerText = env.data[y][x] || '';
                         cells[y].removeAttribute('seleceted');
-                        if (env.selected !== null && env.selected.x == x && env.selected.y == y)
+                        if (env.selected.x == x && env.selected.y == y)
                             cells[y].setAttribute('seleceted', '');
+                        cells[y].removeAttribute('disabled');
+                        if (env.freeze[y][x] === true)
+                            cells[y].setAttribute('disabled', '');
+                        cells[y].setAttribute('error', env.error[y][x]);
                     }
                 }
-                if (env.selected === null)
-                    env.dom.hint.innerText = "Candiates: ";
+                const candiates = get_candiates(env.data, env.selected.x, env.selected.y);
+                if (candiates.length === 0)
+                    env.dom.hint.innerText = "Candiates: No possible candiates";
                 else
-                {
-                    const candiates = get_candiates(env.data, env.selected.x, env.selected.y);
-                    if (candiates.length === 0)
-                        env.dom.hint.innerText = "Candiates: No possible candiates";
-                    else
-                        env.dom.hint.innerText = "Candiates: " + candiates.join(', ');
-                }
+                    env.dom.hint.innerText = "Candiates: " + candiates.join(', ');
+            
                 env.dom.title.innerText = 'Sudoku with {num} blanks'.replace('{num}', env.blank_count);
             }
             function get_candiates(data, x, y, debug) {
@@ -127,6 +191,7 @@
                     for (let y = 0; y < 9; ++y) {
                         positions_to_fill.push({x:x, y:y});
                         env.data[y][x] = null;
+                        env.freeze[y][x] = true;
                     }
                 }
                 let candiates_stack = [];
@@ -179,6 +244,7 @@
                 {
                     const pos = shuffled_positions_to_fill[x];
                     env.data[pos.y][pos.x] = null;
+                    env.freeze[pos.y][pos.x] = false;
                 }
                 
                 console.log('finished');
@@ -220,6 +286,46 @@
                     env.dom.columns.push(column);
                 }
                 setTimeout(() => generate_table(), 100);
+                update_table();
+                document.body.onkeydown = body_onkeydown;
+            }
+            function body_onkeydown(e) {
+                const re_num = /(?<=Digit|Numpad)[123456789]/;
+                if (['KeyA', 'ArrowLeft'].indexOf(e.code) !== -1)
+                {
+                    if (e.ctrlKey === true)
+                        env.selected.x = 0;
+                    else
+                        env.selected.x = (env.selected.x + 9 - 1) % 9;
+                }
+                else if (['KeyD', 'ArrowRight'].indexOf(e.code) !== -1)
+                {
+                    if (e.ctrlKey === true)
+                        env.selected.x = 8;
+                    else
+                     env.selected.x = (env.selected.x + 9 + 1) % 9;
+                }
+                else if (['KeyW', 'ArrowUp'].indexOf(e.code) !== -1)
+                {
+                    if (e.ctrlKey === true)
+                        env.selected.y = 0;
+                    else
+                      env.selected.y = (env.selected.y + 9 - 1) % 9;
+                }
+                else if (['KeyS', 'ArrowDown'].indexOf(e.code) !== -1)
+                {
+                    if (e.ctrlKey === true)
+                        env.selected.y = 8;
+                    else
+                       env.selected.y = (env.selected.y + 9 + 1) % 9;
+                }
+                else if (e.code.match(re_num) !== null)
+                {
+                    const num = e.code.match(re_num)[0];
+                    if (env.freeze[env.selected.y][env.selected.x] === true) return;
+                    env.data[env.selected.y][env.selected.x] = num;
+
+                }
                 update_table();
             }
         </script>
