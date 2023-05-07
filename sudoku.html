@@ -189,7 +189,7 @@
                         
                     }
                 }
-                const candiates = get_candiates(env.data, env.selected.x, env.selected.y);
+                const candiates = get_candiates(env.selected.x, env.selected.y);
                 if (candiates.length === 0)
                     env.dom.hint.innerText = "Candiates: No possible candiates";
                 else
@@ -197,33 +197,31 @@
             
                 env.dom.title.innerText = 'Sudoku with {num} blanks'.replace('{num}', env.blank_count);
             }
-            function get_candiates(data, x, y, debug) {
+            function get_candiates(x, y, debug) {
                 let candiates = [1,2,3,4,5,6,7,8,9];
-                const base_x = 3 * Math.floor(x / 3);
-                const base_y = 3 * Math.floor(y / 3);
                 for (let i = 0; i < 9; ++i)
                 {
-                    let num = data[i][x];
-                    if (i !== y && num !== null) candiates[num-1] = null;
+                    if (i !== y) 
+                        candiates = candiates.filter(n => n !== env.data[i][x]);
                     
-                    num = data[y][i];
-                    if (i !== x && num !== null) candiates[num-1] = null;
+                    if (i !== x)
+                        candiates = candiates.filter(n => n !== env.data[y][i]);
                 }
+                const base_x = 3 * Math.floor(x / 3);
+                const base_y = 3 * Math.floor(y / 3);
                 for (let dx = 0; dx < 3; ++dx)
                 {
                     for (let dy = 0; dy < 3; ++dy)
                     {
                         const x2 = base_x + dx;
                         const y2 = base_y + dy;
-                        if (x2 !== x && y2 !== y) {
-                            num = data[y2][x2];
-                            if (num !== null) candiates[num-1] = null;
-                            
-                        }
+                        if (x2 === x && y2 === y)
+                            continue;
+                        candiates = candiates.filter(n => n !== env.data[y2][x2]);
                     }
                 }
 
-                return candiates.filter(k => k !== null);
+                return candiates;
             }
             function shuffle(list) {
                 let flag = {};
@@ -250,15 +248,16 @@
                         env.freeze[y][x] = true;
                     }
                 }
-                positions_to_fill = shuffle(positions_to_fill);
+                positions_to_fill = (positions_to_fill);
+                env.positions_to_fill = positions_to_fill;
                 let candiates_stack = [];
                 const MODE_FORWARD = 1;
                 const MODE_BACKWARD = 2;
                 let mode = MODE_FORWARD;
-                let max_attempt = -1;
+                let max_attempt = 10000000;
                 let attempt = 0;
                 let present_every_n_attempts = Math.ceil(max_attempt / 100);
-                present_every_n_attempts = 10000000;
+                present_every_n_attempts = 1000000;
                 // '120,827,159'
                 for (attempt = 0; max_attempt === -1 || attempt < max_attempt; ++attempt) {
                     if (mode === MODE_FORWARD) {
@@ -266,15 +265,15 @@
                         if (index >= 81) break;
                         const position = positions_to_fill[index];
                         env.selected = {x:position.x, y:position.y};
-                        let candiates = get_candiates(env.data, position.x, position.y);
+                        let candiates = get_candiates(position.x, position.y);
                         if (candiates.length === 0)
                         {
                             mode = MODE_BACKWARD;
                         }
                         else
                         {
-                            //candiates = shuffle(candiates);
-                            env.data[position.y][position.x] = candiates[candiates.length - 1];
+                            candiates = shuffle(candiates);
+                            env.data[position.y][position.x] = candiates[0];
                             candiates_stack.push(candiates);
                         }
                     }
@@ -284,8 +283,9 @@
                         let candiates = candiates_stack[candiates_stack.length-1];
                         env.selected = {x:position.x, y:position.y};
                         if (candiates.length > 1) {
-                            candiates_stack[candiates_stack.length-1].pop();
-                            env.data[position.y][position.x] = candiates[candiates.length - 1];
+                            candiates = candiates.slice(1); 
+                            env.data[position.y][position.x] = candiates[0];
+                            candiates_stack[candiates_stack.length-1] = candiates;
                             mode = MODE_FORWARD;
                         } else {
                             env.data[position.y][position.x] = null;
@@ -301,18 +301,20 @@
                     }
                 }
                 
-                //if (candiates_stack.length === 81) {
-                //    let blank_count = env.blank_count;
-                //    const shuffled_positions_to_fill = shuffle(positions_to_fill);
-                //    for (let x = 0; x < env.blank_count; ++x)
-                //    {
-                //        const pos = shuffled_positions_to_fill[x];
-                //        env.data[pos.y][pos.x] = null;
-                //        env.freeze[pos.y][pos.x] = false;
-                //    }
-                //}
+                if (candiates_stack.length === 81) {
+                    let blank_count = env.blank_count;
+                    const shuffled_positions_to_fill = shuffle(positions_to_fill);
+                    for (let x = 0; x < env.blank_count; ++x)
+                    {
+                        const pos = shuffled_positions_to_fill[x];
+                        env.data[pos.y][pos.x] = null;
+                        env.freeze[pos.y][pos.x] = false;
+                    }
+                }
                 
                 console.log('finished with ' + attempt + ' attempts.');
+                console.log('mode = ', mode);
+                console.log('candiates_stack.length ' + candiates_stack.length);
                 await async_update_table();
             }
             function body_onload() {
@@ -403,7 +405,7 @@
         <div style="display:flex; flex-direction: row;">
             <h1 id="title" style="margin: 0px 1rem 0px 0px;">Sudoku</h1>
         </div>
-        <input type="range" min="10" max="80" value="50" onchange="env.blank_count=this.value; update_table();"/>
+        <input type="range" min="10" max="80" value="45" onchange="env.blank_count=this.value; update_table();"/>
         <input type="button" value="generate" onclick="generate_table()"/>
         <h3 id="hint" style="margin: 0px">Candiates:</h3>
         <div id="table">
